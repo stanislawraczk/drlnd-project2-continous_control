@@ -9,72 +9,83 @@ import torch.optim as optim
 
 from model import Actor, Critic
 
-BUFFER_SZIE = int(1e6)
+BUFFER_SZIE = int(1e5) # memory size
 BATCH_SIZE = 128
-GAMMA = .99
-TAU = 1e-3
-LR_ACTOR = 3e-4
-LR_CRITIC = 1e-3
-WEIGHT_DECAY = 1e-2
-SIGMA = 0.2
-THETA = 0.3
-UPDATE_EVERY = 20
-UPDATES_NUM = 10
-EXPLORATION_STEPS = 1e4
+GAMMA = .99 # discount parameter
+TAU = 1e-3 # soft update parameter
+LR_ACTOR = 1e-3 # actor learning rate
+LR_CRITIC = 3e-4 # critic learning rate
+WEIGHT_DECAY = 0 # weight decay turned off
+SIGMA = 0.2 # OU Noise sigma parameter
+THETA = 0.15 # OU Noise theta parameter
+LEARN_EVERY = 20 # number of steps between learning
+LEARNS_NUM = 10 # number of times the networks are optimized each learning step
 EPSILON = 1
 EPS_DECAY = 0.999
-EPS_MIN = 0.001
+EPS_MIN = 1 #EPS_MIN set to 1 to not to reduce OU Noise further
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 class Agent:
+    '''
+    ddpg agent class
+    '''
     def __init__(self, state_size, action_size, seed):
         self.state_size = state_size
         self.action_size = action_size
         self.seed = random.seed(seed)
-
+        '''
+        Initializing local and target networks for actor and critic
+        '''
         self.actor_network_local = Actor(state_size, action_size, seed).to(device)
         self.actor_network_target = Actor(state_size, action_size, seed).to(device)
-        # for local_param, target_param in zip(self.actor_network_local.parameters(), self.actor_network_target.parameters()):
-        #     target_param.data.copy_(local_param.data)
         self.actor_optim = optim.Adam(self.actor_network_local.parameters(), lr=LR_ACTOR)
 
         self.critic_network_local = Critic(state_size, action_size, seed).to(device)
         self.critic_network_target = Critic(state_size, action_size, seed).to(device)
-        # for local_param, target_param in zip(self.critic_network_local.parameters(), self.critic_network_target.parameters()):
-        #     target_param.data.copy_(local_param.data)
         self.critic_optim = optim.Adam(self.critic_network_local.parameters(), lr=LR_CRITIC, weight_decay=WEIGHT_DECAY)
 
         self.noise = OUNoise(action_size, seed)
         self.t_step = 0
         self.epsilon = EPSILON
-
+        '''
+        Initializing replay buffer
+        '''
         self.memory = ReplayBuffer(BUFFER_SZIE, BATCH_SIZE, seed)
 
+    '''
+    every step adds experience tuple to memory and runs learning if applicable in current step
+    '''
     def step(self, state, action, reward, next_state, done):
         self.memory.add(state, action, reward, next_state, done)
         self.t_step += 1
-        if len(self.memory) > BATCH_SIZE:
-            experiences = self.memory.sample()
-            self.learn(experiences, GAMMA)
+        if len(self.memory) > BATCH_SIZE and self.t_step % LEARN_EVERY == 0:
+            for i in range(LEARNS_NUM):
+                experiences = self.memory.sample()
+                self.learn(experiences, GAMMA)
 
     def reset(self):
         self.noise.reset()
 
+    '''
+    selects action from actor local network, adds noise if applicable and returns it
+    '''
     def act(self, state, add_noise=True):
         state = torch.from_numpy(state).float().to(device)
         self.actor_network_local.eval()
         with torch.no_grad():
             action = self.actor_network_local(state).cpu().data.numpy()
         self.actor_network_local.train()
-        if add_noise and self.t_step < EXPLORATION_STEPS:
-            action = action + self.noise.sample()
-        else:
+        if add_noise:
             action = action + self.epsilon * self.noise.sample()
             self.epsilon = max(self.epsilon * EPS_DECAY, EPS_MIN)
+
         return np.clip(action, -1, 1)
 
+    '''
+    Calculate TD for critic and optimize critic network, then calculate actor loss and optimize actor network
+    '''
     def learn(self, experiences, gamma):
         states, actions, rewards, next_states, dones = experiences
 
@@ -96,11 +107,12 @@ class Agent:
         actor_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.actor_network_local.parameters(), 1)
         self.actor_optim.step()
-        if self.t_step % UPDATE_EVERY == 0:
-            for i in range(UPDATES_NUM):
-                self.soft_update(self.critic_network_local, self.critic_network_target, TAU)
-                self.soft_update(self.actor_network_local, self.actor_network_target, TAU)
+        self.soft_update(self.critic_network_local, self.critic_network_target, TAU)
+        self.soft_update(self.actor_network_local, self.actor_network_target, TAU)
 
+    '''
+    Update target network weights using tau parameter
+    '''
     def soft_update(self, local_model, target_model, tau):
         for local_param, target_param in zip(local_model.parameters(), target_model.parameters()):
             target_param.data.copy_(tau*local_param.data + (1.0-tau)*target_param.data)
@@ -120,7 +132,7 @@ class OUNoise:
 
     def sample(self):
         x = self.state
-        dx = self.theta * (self.mu - x) + self.sigma * np.random.uniform(low=-1, high=1, size=len(x)) #np.array([random.random() for i in range(len(x))])
+        dx = self.theta * (self.mu - x) + self.sigma * np.random.uniform(low=-1, high=1, size=len(x))
         self.state = x + dx
         return self.state
 
