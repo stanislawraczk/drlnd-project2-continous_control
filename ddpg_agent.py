@@ -13,16 +13,16 @@ BUFFER_SZIE = int(1e5) # memory size
 BATCH_SIZE = 128
 GAMMA = .99 # discount parameter
 TAU = 1e-3 # soft update parameter
-LR_ACTOR = 1e-3 # actor learning rate
+LR_ACTOR = 1e-4 # actor learning rate
 LR_CRITIC = 3e-4 # critic learning rate
 WEIGHT_DECAY = 0 # weight decay turned off
-SIGMA = 0.2 # OU Noise sigma parameter
+SIGMA = 0.3 # OU Noise sigma parameter
 THETA = 0.15 # OU Noise theta parameter
 LEARN_EVERY = 20 # number of steps between learning
 LEARNS_NUM = 10 # number of times the networks are optimized each learning step
-EPSILON = 1
-EPS_DECAY = 0.999
-EPS_MIN = 1 #EPS_MIN set to 1 to not to reduce OU Noise further
+# EPSILON = 1
+# EPS_DECAY = 0.999
+# EPS_MIN = 1 #EPS_MIN set to 1 to not to reduce OU Noise further
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -48,7 +48,7 @@ class Agent:
 
         self.noise = OUNoise(action_size, seed)
         self.t_step = 0
-        self.epsilon = EPSILON
+        # self.epsilon = EPSILON
         '''
         Initializing replay buffer
         '''
@@ -78,8 +78,8 @@ class Agent:
             action = self.actor_network_local(state).cpu().data.numpy()
         self.actor_network_local.train()
         if add_noise:
-            action = action + self.epsilon * self.noise.sample()
-            self.epsilon = max(self.epsilon * EPS_DECAY, EPS_MIN)
+            action = action + self.noise.sample()
+            # self.epsilon = max(self.epsilon * EPS_DECAY, EPS_MIN)
 
         return np.clip(action, -1, 1)
 
