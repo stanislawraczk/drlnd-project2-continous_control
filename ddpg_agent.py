@@ -20,9 +20,7 @@ SIGMA = 0.3 # OU Noise sigma parameter
 THETA = 0.15 # OU Noise theta parameter
 LEARN_EVERY = 20 # number of steps between learning
 LEARNS_NUM = 10 # number of times the networks are optimized each learning step
-# EPSILON = 1
-# EPS_DECAY = 0.999
-# EPS_MIN = 1 #EPS_MIN set to 1 to not to reduce OU Noise further
+
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -48,7 +46,6 @@ class Agent:
 
         self.noise = OUNoise(action_size, seed)
         self.t_step = 0
-        # self.epsilon = EPSILON
         '''
         Initializing replay buffer
         '''
@@ -79,7 +76,6 @@ class Agent:
         self.actor_network_local.train()
         if add_noise:
             action = action + self.noise.sample()
-            # self.epsilon = max(self.epsilon * EPS_DECAY, EPS_MIN)
 
         return np.clip(action, -1, 1)
 
